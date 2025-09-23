@@ -15,7 +15,7 @@ MONDAY_FILE_URL = "https://api.monday.com/v2/file"
 
 API_KEY = os.getenv("MONDAY_API_KEY")
 BOARD_ID = os.getenv("MONDAY_CCINVOICE_BOARD_ID")
-GROUP_ID = "group_mkvmyd40"
+GROUP_ID = os.getenv("GROUPID")
 
 empty_PPA = "CCPPA Form.xlsx"
 
@@ -460,7 +460,7 @@ def add_ccppa():
     good_data = add.get_item(item_id)
     add.current_item_data['group']
     if good_data == True:
-        add.create_ppa()
+        add.create_ccppa()
     else:
         print('Stopped Creation process, bad data or PPA present')
     return 'done'
