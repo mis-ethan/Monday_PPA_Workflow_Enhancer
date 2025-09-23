@@ -7,23 +7,24 @@ import shutil
 from win32com import client
 import pythoncom
 
+load_dotenv()
 
 MONDAY_API_URL = "https://api.monday.com/v2"
 MONDAY_FILE_URL = "https://api.monday.com/v2/file"
 
 API_KEY = os.getenv("MONDAY_API_KEY")
 BOARD_ID = os.getenv("MONDAY_BOARD_ID")
+GROUP_ID = "topics"
 
 empty_PPA = "PPA Form.xlsx"
 
 column_ids = {'Vendor':'text_mkv6s9er', 'Date':'date4','Total':'numeric_mkv65026','Inkind':'numeric_mkv6tbbk','Department':'text_mkvft17m','Description':'text_mkve5mct','OrderedBy':'multiple_person_mkvfj0v1','PPA file':'file_mkvm3pf3','Workflow':'color_mkv67wpq'}
 
-load_dotenv()
 
 app = Flask(__name__)
 
 HEADERS = {
-    "Authorization" : API_KEY
+    "Authorization" : API_KEY,
 }
 
 
@@ -75,13 +76,14 @@ class add_PPA_to_board:
                         print(f"  Location: {error['locations']}")
                     if 'path' in error:
                         print(f"  Path: {error['path']}")
-        print('PDF Uploaded')
+            else:
+                print('PDF Uploaded')
         try:
             os.remove(file_path)
             print(f"File '{file_path}' deleted successfully.")
         except Exception as e:
             print(f"An error occurred while deleting PDF file: {e}")
-        return "PDF Uploaded"
+        return
     
     def get_item(self, item_id):
         self.current_item_id = item_id
@@ -129,10 +131,9 @@ class add_PPA_to_board:
                 #print("Column Values:")
                 # loop through column_values and extract data needed
                 for column in item_data['column_values']:
-                    
                     self.current_item_data[column['id']] = (column['text'])
-                    print(f"- {column['column']['title']} ({column['id']}): {column['text']}")
-                print(self.current_item_data[column_ids['PPA file']])
+                    #print(f"- {column['column']['title']} ({column['id']}): {column['text']}")
+                #print(self.current_item_data[column_ids['PPA file']])
                 if not self.current_item_data[column_ids['PPA file']]:
                     if self.current_item_data[column_ids['Workflow']] == 'PPA Creation':
                         print("Data is good to go")
@@ -210,5 +211,65 @@ def add_ppa():
         print('Stopped Creation process, bad data or PPA present')
     return 'done'
 
+def group_create_ppa(items):
+    for item in items:
+        print('Started PPA creation on item: ' + str(item))
+        good_data = add.get_item(item)
+        if good_data == True:
+            add.create_ppa()
+        else:
+            print('Stopped Creation process, bad data or PPA present')
+    return
+
+def get_group_ids():
+    item_ids = []
+    query = """
+    query ($board_id: ID!, $group_id: String!) {
+    boards(ids: [$board_id]) {
+        groups(ids: [$group_id]) {
+            id
+            title
+            items_page{
+            items {
+                id
+                name
+            }
+            }
+        }
+    }
+    }
+    """
+    variables = {
+        "board_id" : BOARD_ID,
+        "group_id" : GROUP_ID
+    }
+    full_query = {"query": query, "variables": variables}
+    response = requests.post(MONDAY_API_URL, json=full_query, headers=HEADERS)
+    # Check for GraphQL errors inside the response body
+    if response.status_code != 200:
+            print(f"HTTP Error getting item ids: {response.status_code}")
+            print(response.text)
+    else:
+        response_json = response.json()
+        # Check for GraphQL errors inside the response body
+        if 'errors' in response_json:
+            print("GraphQL Errors found getting item ids:")
+            for error in response_json['errors']:
+                print(f"- Message: {error.get('message')}")
+                if 'locations' in error:
+                    print(f"  Location: {error['locations']}")
+                if 'path' in error:
+                    print(f"  Path: {error['path']}")
+        else:
+            items = response_json['data']['boards'][0]['groups'][0]['items_page']['items']
+            #print("Error:", response.text)
+            for item in items:
+                item_ids.append(item['id'])
+            #print("Item IDs:", item_ids)
+    return item_ids
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    #app.run(debug=True)
+    board = {}
+    items = get_group_ids()
+    group_create_ppa(items)
