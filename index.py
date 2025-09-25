@@ -15,7 +15,7 @@ MONDAY_FILE_URL = "https://api.monday.com/v2/file"
 
 API_KEY = os.getenv("MONDAY_API_KEY")
 BOARD_ID = os.getenv("MONDAY_CCINVOICE_BOARD_ID")
-GROUP_ID = os.getenv("GROUPID")
+GROUP_ID = "topics"
 
 empty_PPA = "CCPPA Form.xlsx"
 
@@ -313,8 +313,8 @@ class add_CCPPA_to_board:
         self.group_ids = item_ids
         return item_ids
     
-    def create_ccppa(self):
-        items = self.get_group_ids(GROUP_ID)
+    def create_ccppa(self, group):
+        items = self.get_group_ids(group)
         nancy_items = []
         tyson_items = []
         add.cc_get_item(self.group_ids[0])
@@ -456,16 +456,14 @@ def add_ccppa():
     if not data:
         print("Request empty")
         return ":("
-    item_id = data["event"]["itemId"]
-    good_data = add.get_item(item_id)
-    add.current_item_data['group']
-    if good_data == True:
-        add.create_ccppa()
+    group_id = data["event"]["groupId"]
+    if group_id:
+        add.create_ccppa(group_id)
     else:
-        print('Stopped Creation process, bad data or PPA present')
+        print('Stopped Creation process, no group presented')
     return 'done'
 
 
 if __name__ == "__main__":
-    #app.run(debug=True)
-    add.create_ccppa()
+    app.run(debug=True)
+    #add.create_ccppa(GROUP_ID)
