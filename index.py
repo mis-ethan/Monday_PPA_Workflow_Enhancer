@@ -7,6 +7,9 @@ import shutil
 from win32com import client
 import pythoncom
 import datetime
+import tkinter as tk
+from tkinter import messagebox
+
 
 load_dotenv()
 
@@ -81,7 +84,7 @@ class add_CCPPA_to_board:
                         print(f"  Path: {error['path']}")
             else:
                 filetype = file_path[file_path.find('.')+1:]
-                print(filetype + 'File Uploaded')
+                print(filetype + ' File Uploaded')
         try:
             os.remove(file_path)
             print(f"File '{file_path}' deleted successfully.")
@@ -193,7 +196,8 @@ class add_CCPPA_to_board:
                     self.current_item_data[column['id']] = (column['text'])
                     #print(f"- {column['column']['title']} ({column['id']}): {column['text']}")
                 #print(self.current_item_data[column_ids['PPA file']])
-                if self.current_item_data[column_ids['Workflow']] == 'Credit Card PPA':
+                required_fields = self.current_item_data[column_ids['Total']] and self.current_item_data[column_ids['Description']]
+                if self.current_item_data[column_ids['Workflow']] == 'CC Invoice'  and required_fields:
                     #print("Data is good to go")
                     data_good = True
         return data_good
@@ -313,12 +317,13 @@ class add_CCPPA_to_board:
         self.group_ids = item_ids
         return item_ids
     
-    def create_ccppa(self, group):
+    def create_ccppa(self, group, statement):
         items = self.get_group_ids(group)
         nancy_items = []
         tyson_items = []
+        statement_item = []
         add.cc_get_item(self.group_ids[0])
-        self.group_statement = self.current_item_data[column_ids['Statement']]
+        self.group_statement = statement
         if not self.group_statement:
             print("Error retrieving statement. Exiting")
             return
@@ -332,11 +337,14 @@ class add_CCPPA_to_board:
                 elif ordered_by == "Tyson Murphy":
                     tyson_items.append(self.current_item_data)
                 else:
-                    print("error: an item is missing who it was purchased by. Excluding item")
+                    print("error: an item is missing who it was purchased by. Adding item under Tyson Murphy. Please verify")
+                    tyson_items.append(self.current_item_data)
             else:
-                print('Item # ' + str(self.current_item_id) + ' is empty or there was an error')
-
-        new_ppa_name = self.group_statement + "Elan Financial Serv PPA.xlsx"
+                if self.current_item_data[column_ids['Workflow']] == "Statement":
+                    statement_item.append(self.current_item_data)
+                else:
+                    print('Item # ' + str(self.current_item_id) + ' is empty or there was an error')
+        new_ppa_name = self.group_statement + " Elan Financial Serv PPA.xlsx"
         #destination_file = destination_folder + r"/" + new_ppa_name
         #currently destination folder same as working directory
         destination_file = new_ppa_name
@@ -353,17 +361,17 @@ class add_CCPPA_to_board:
             workbook = load_workbook(destination_file)
             total = 0
             sheet = workbook.active
-            current_row = 24
-            sheet["C23"] = "Statement for Nancy Ortega"
-            current_row = 24
+            if statement_item:
+                sheet["C23"] = statement_item[0][column_ids['Description']]
+            sheet["C24"] = "Statement for Nancy Ortega"
+            current_row = 25
             for item in nancy_items:
                 sheet["B"+str(current_row)] = "1"
                 sheet["C"+str(current_row)] = item[column_ids['Description']]
                 sheet["M"+str(current_row)] = item[column_ids['Department']]
-                sheet["N"+str(current_row)] = item[column_ids['Total']]
+                sheet["N"+str(current_row)] = float(item[column_ids['Total']])
                 total += float(item[column_ids['Total']])
                 current_row += 1
-            
             current_row += 1
             sheet["C"+str(current_row)] = "Statement for Tyson Murphy"
             current_row += 1
@@ -371,7 +379,7 @@ class add_CCPPA_to_board:
                 sheet["B"+str(current_row)] = "1"
                 sheet["C"+str(current_row)] = item[column_ids['Description']]
                 sheet["M"+str(current_row)] = item[column_ids['Department']]
-                sheet["N"+str(current_row)] = item[column_ids['Total']]
+                sheet["N"+str(current_row)] = float(item[column_ids['Total']])
                 total += float(item[column_ids['Total']])
                 current_row += 1
             workbook.save(filename=destination_file)
@@ -382,12 +390,10 @@ class add_CCPPA_to_board:
         self.ccxlsxtopdf(destination_file)
         #create new item to hold PPA
         today_date = datetime.datetime.now().strftime("%Y-%m-%d")
-        print(str(today_date))
-
         column_values = '''{
             "numeric_mkv6v1a1": '''+ str(total) +''',  
-            "color_mkv67wpq": "PPA Creation",
-            "status" : "Waiting for Tyson to Sign PPA",
+            "color_mkv67wpq": "PPA",
+            "status" : "Review PPA",
             "person" : "nancy.ortega@ochsinc.org",
             "date_mkvpfs6q" : "'''+ today_date +'''",
             "dropdown_mkvkjm3z" : "Various"
@@ -406,7 +412,7 @@ class add_CCPPA_to_board:
         """
         variables = {
             "boardId" : BOARD_ID,
-            "groupId" : GROUP_ID,
+            "groupId" : group,
             "itemName": "PPA - " + self.group_statement,
             "columnVals" : column_values
         }
@@ -442,12 +448,11 @@ class add_CCPPA_to_board:
                 self.current_item_id = response_json['data']['create_item']['id']
                 self.upload_to_monday(destination_file[:len(destination_file)-4]+'pdf')
                 self.upload_to_monday(destination_file)
-        
         return True
 
 add = add_CCPPA_to_board(BOARD_ID, API_KEY)
 
-#need to redo
+#not functional currently, would need to host on windows machine do run
 @app.route("/add_ccppa", methods=["POST"])
 def add_ccppa():
     data = request.json
@@ -463,7 +468,36 @@ def add_ccppa():
         print('Stopped Creation process, no group presented')
     return 'done'
 
+def on_generate():
+    group = entry_group.get()
+    statement = entry_statement.get()
+    if group and statement:
+        root.destroy()
+        add.create_ccppa(group, statement)
+    else:
+        messagebox.showwarning("Input Error", "Both Group and Statement must be filled.")
+        return
 
 if __name__ == "__main__":
-    app.run(debug=True)
-    #add.create_ccppa(GROUP_ID)
+    #GROUP_ID = 'group_title'
+    #add.create_ccppa(GROUP_ID, "SEP 2025")
+
+    # Create main window
+    root = tk.Tk()
+    root.title("CC PPA Generator")
+
+    # Group label and entry
+    tk.Label(root, text="Group").grid(row=0, column=0, padx=10, pady=5, sticky="e")
+    entry_group = tk.Entry(root, width=40)
+    entry_group.grid(row=0, column=1, padx=10, pady=5)
+
+    # Statement label and entry
+    tk.Label(root, text="Statement").grid(row=1, column=0, padx=10, pady=5, sticky="e")
+    entry_statement = tk.Entry(root, width=40)
+    entry_statement.grid(row=1, column=1, padx=10, pady=5)
+
+    # Generate button
+    btn_generate = tk.Button(root, text="Generate", command=on_generate)
+    btn_generate.grid(row=2, column=0, columnspan=2, pady=10)
+
+    root.mainloop()
