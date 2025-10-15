@@ -16,7 +16,6 @@ load_dotenv()
 API_KEY = os.getenv("MONDAY_API_KEY")
 BOARD_ID = os.getenv("MONDAY_BOARD_ID")
 GROUP_ID = 'group_mkvpt40z'
-#FILE_COLUMN_KEYS = {'invoice' : 'file_mkv6n4tv', 'PPA':'file_mkvk90zm'}  # file column key value pairs
 FILE_COLUMN_IDS = ['file_mkv6n4tv','file_mkvk90zm']  # file column IDs
 OUTPUT_FOLDER = 'monday_files'  # Base output directory
 
@@ -94,12 +93,16 @@ def download_file(url: str, save_path: str):
         print(f"❌ Other error: {e}")
 
 
-def process_items(items: list, file_column_ids: list):
+def process_items(items: list, file_column_ids: list, merge):
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
     for item in items:
         item_id = item['id']
         item_name = item['name'].strip().replace(' ', '_').replace('/', '_')
-        folder_name = os.path.join(OUTPUT_FOLDER, f"temp")
+        if(merge):
+            folder_name = os.path.join(OUTPUT_FOLDER, f"temp")
+        else:
+            folder_name = os.path.join(OUTPUT_FOLDER, item_name)
+
         #create new temp folder
         os.makedirs(folder_name, exist_ok=True)
         print(f"\n📁 Processing item: {item_name} (ID: {item_id})")
@@ -124,14 +127,16 @@ def process_items(items: list, file_column_ids: list):
                     download_file(file_url, os.path.join(folder_name, asset['name']))
             except Exception as e:
                 print(f"⚠️ Error downlading file from column '{column['id']}' in item {item_id}: {e}")
-        merge_pdfs(folder_name, item['name'] + "_merged.pdf")
-        #delete previous temp folder
-        try:
-            shutil.rmtree(folder_name)
-            print(f"Folder '{folder_name}' and its contents deleted successfully.")
-        except OSError as e:
-            print(f"❌Error: {e.filename} - {e.strerror}.")
-            return
+        if(merge):
+            merge_pdfs(folder_name, item['name'] + "_merged.pdf")
+            #delete previous temp folder
+            try:
+                shutil.rmtree(folder_name)
+                print(f"Folder '{folder_name}' and its contents deleted successfully.")
+            except OSError as e:
+                print(f"❌Error: {e.filename} - {e.strerror}.")
+                return
+    return
         
 
 def merge_pdfs(folder_path,file_name):
@@ -196,4 +201,4 @@ if __name__ == '__main__':
     print("🔄 Fetching items from Monday.com group...")
     items = get_items_in_group(BOARD_ID, GROUP_ID)
     print(f"✅ Found {len(items)} items.")
-    process_items(items, FILE_COLUMN_IDS)
+    process_items(items, FILE_COLUMN_IDS, merge=True)
