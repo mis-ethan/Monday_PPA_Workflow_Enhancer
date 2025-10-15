@@ -20,7 +20,7 @@ API_KEY = os.getenv("MONDAY_API_KEY")
 BOARD_ID = os.getenv("MONDAY_CCINVOICE_BOARD_ID")
 GROUP_ID = "topics"
 
-empty_PPA = "CCPPA Form.xlsx"
+empty_PPA = "PPA_Templates/CCPPA Form.xlsx"
 
 column_ids = {'Vendor':'text_mkv6s9er', 'Statement':'color_mkvkk3zr','Total':'numeric_mkv65026','Inkind':'numeric_mkv6tbbk','Department':'dropdown_mkvkjm3z','Description':'text_mkve5mct','OrderedBy':'multiple_person_mkvkp06f','PPA file':'file_mkvksbn1','Workflow':'color_mkv67wpq','status':'status'}
 
@@ -91,61 +91,6 @@ class add_CCPPA_to_board:
         except Exception as e:
             print(f"An error occurred while deleting" + filetype + "file: {e}")
         return
-    
-    def get_item(self, item_id):
-        self.current_item_id = item_id
-        data_good = False
-        self.current_item_data = {}
-        # Query Monday Board for Item info
-        query = {
-            'query': f'''
-                query {{
-                    items(ids: {item_id}) {{
-                        id
-                        name
-                        column_values {{
-                            id
-                            column{{
-                                title
-                            }}
-                            text
-                        }}
-                    }}
-                }}
-            '''
-        }
-        response = requests.post(MONDAY_API_URL, json=query, headers=HEADERS)
-        #parse response for column values and check for errors
-        if response.status_code != 200:
-            print(f"HTTP Error: {response.status_code}")
-            print(response.text)
-        else:
-            response_json = response.json()
-            # Check for GraphQL errors inside the response body
-            if 'errors' in response_json:
-                print("GraphQL Errors found:")
-                for error in response_json['errors']:
-                    print(f"- Message: {error.get('message')}")
-                    if 'locations' in error:
-                        print(f"  Location: {error['locations']}")
-                    if 'path' in error:
-                        print(f"  Path: {error['path']}")
-            else:
-                # No GraphQL errors; process the data
-                item_data = response_json['data']['items'][0]
-                self.current_invoice_number = item_data['name']
-                #print(f"Invoice #: {item_data['name']}")
-                #print("Column Values:")
-                # loop through column_values and extract data needed
-                for column in item_data['column_values']:
-                    self.current_item_data[column['id']] = (column['text'])
-                    #print(f"- {column['column']['title']} ({column['id']}): {column['text']}")
-                #print(self.current_item_data[column_ids['PPA file']])
-                if not self.current_item_data[column_ids['PPA file']]:
-                    if self.current_item_data[column_ids['Workflow']] == 'PPA Creation':
-                        print("Data is good to go")
-                        data_good = True
-        return data_good
     
     def cc_get_item(self, item_id):
         self.current_item_id = item_id
@@ -234,40 +179,6 @@ class add_CCPPA_to_board:
         excel.Quit()
         print('PDF created successfully')
         return
-
-    def create_ppa(self):
-        data = self.current_item_id
-        new_ppa_name ="PPA Form -" + data[column_ids['Vendor']] + self.current_invoice_number + ".xlsx"
-        #destination_file = destination_folder + r"/" + new_ppa_name
-        destination_file = new_ppa_name
-        #Create the file for ppa
-        try:
-            shutil.copy(empty_PPA, destination_file)
-            print(f"'{empty_PPA}' copied to '{destination_file}' successfully.")
-        except FileNotFoundError:
-            print(f"Error: '{empty_PPA}' not found.")
-        except Exception as e:
-            print(f"An error occurred when creating empty PPA form: {e}")
-        #open file
-        try:
-            workbook = load_workbook(destination_file)
-            sheet = workbook.active
-            sheet["L13"] = data[column_ids['Vendor']]
-            sheet["B13"] = data[column_ids['Department']]
-            sheet["G19"] = self.current_invoice_number
-            sheet["B23"] = 1
-            sheet["N23"] = data[column_ids['Total']]
-            sheet["C23"] = data[column_ids['Description']]
-            sheet["C24"] = "job date: " + data[column_ids['Date']]
-            sheet["D40"] = "PPA Prepared by " + data[column_ids['OrderedBy']]
-            workbook.save(filename=destination_file)
-        except Exception as e:
-            print(e)
-        else:
-            print('PPA Created Succesfully')
-        self.xlsxtopdf(destination_file)
-        self.upload_to_monday(destination_file[:len(destination_file)-4]+'pdf')
-        return True
 
     def get_group_ids(self, group_id):
         item_ids = []
@@ -452,7 +363,7 @@ class add_CCPPA_to_board:
 
 add = add_CCPPA_to_board(BOARD_ID, API_KEY)
 
-#not functional currently, would need to host on windows machine do run
+#not functional currently, also would need to host on windows machine to run
 @app.route("/add_ccppa", methods=["POST"])
 def add_ccppa():
     data = request.json
